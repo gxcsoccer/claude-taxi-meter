@@ -1,0 +1,14 @@
+{
+  "name": "claude-taxi-meter",
+  "owner": { "name": "gxc.510" },
+  "description": "A taxi meter for Claude Code: watch the fare tick up as tokens burn.",
+  "plugins": [
+    {
+      "name": "taxi-meter",
+      "source": "./",
+      "description": "A taxi meter in the status line: the session's cost ticks up live as tokens burn.",
+      "version": "0.1.0",
+      "author": { "name": "gxc.510" }
+    }
+  ]
+}

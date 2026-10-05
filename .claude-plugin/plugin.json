@@ -1,0 +1,61 @@
+{
+  "name": "taxi-meter",
+  "version": "0.1.0",
+  "description": "A taxi meter in the status line: the session's cost ticks up live as tokens burn.",
+  "author": {
+    "name": "gxc.510"
+  },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "language": {
+      "type": "string",
+      "title": "Language",
+      "description": "Meter labels: en (FOR HIRE/HIRED/WAITING) or zh (空车/载客/等候)",
+      "default": "en",
+      "options": [
+        "en",
+        "zh"
+      ]
+    },
+    "currency": {
+      "type": "string",
+      "title": "Currency",
+      "description": "Show the fare in USD or CNY",
+      "default": "USD",
+      "options": [
+        "USD",
+        "CNY"
+      ]
+    },
+    "cnyRate": {
+      "type": "number",
+      "title": "CNY per USD",
+      "description": "Exchange rate used when currency is CNY",
+      "default": 7.1
+    },
+    "sound": {
+      "type": "boolean",
+      "title": "Ka-ching",
+      "description": "Play a ka-ching when the fare crosses a milestone ($1, $2, $5, $10 ...)",
+      "default": true
+    },
+    "bigTripUsd": {
+      "type": "number",
+      "title": "Big trip toast (USD)",
+      "description": "Toast a receipt when one turn costs at least this much",
+      "default": 0.5
+    },
+    "budgetUsd": {
+      "type": "number",
+      "title": "Budget (USD)",
+      "description": "Default fare limit per session; 0 for none. /taxi budget changes it for this session",
+      "default": 0
+    },
+    "planUsd": {
+      "type": "number",
+      "title": "Subscription (USD/month)",
+      "description": "Your Claude subscription's monthly price; the meter then shows how many times over this month's usage pays it back. 0 for API billing",
+      "default": 0
+    }
+  }
+}
