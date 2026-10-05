@@ -2,6 +2,8 @@
 
 A Claude Code mod that puts a taxi meter in your status line. The fare ticks up live as tokens burn.
 
+![Claude Taxi Meter demo: the fare ticks up in the status line, the meter pane shows big LED digits, and a Ka-ching toast fires at $0.50](docs/demo.gif)
+
 ```
 🚕 FOR HIRE   $1.20                                  ← idle
 🚖 HIRED●   $1.27 ▲0.03 · trip $0.07 · 🔥$0.42/min   ← model streaming
