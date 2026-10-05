@@ -352,3 +352,38 @@ test('a plan shows payback in the status line and rings at 1×', { options: { pl
   expect(out.text).toContain('copied to your clipboard')
   expect(copied[0]).toContain('1.0× paid back')
 })
+
+test('the demo plays every beat, then leaves no trace', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  const ledger = { usd: 7.74 }
+  const statuses: string[] = []
+  const toasts: string[] = []
+  world(on, ledger, statuses, toasts)
+
+  await $.session.start({ cwd: '/tmp', source: 'startup' } as never)
+  await clock.advance(500)
+  expect((await $.command.run(run('demo'))).text).toContain('Demo ride started')
+  expect((await $.command.run(run('demo'))).text).toContain('already running')
+
+  for (let i = 0; i < 160; i++) await clock.advance(100)
+
+  expect(statuses.some(s => s.includes('HIRED●') || s.includes('HIRED○'))).toBe(true)
+  expect(statuses.some(s => s.includes('WAITING') && s.includes('Bash'))).toBe(true)
+  // $7.74 rolls past $10: one ka-ching, and the ride's receipt toast
+  expect(toasts.filter(t => t.includes('Ka-ching') && t.includes('$10.00')).length).toBe(1)
+  expect(toasts.some(t => t.includes('That ride'))).toBe(true)
+  expect(Math.max(...statuses.map(drum))).toBeGreaterThanOrEqual(10)
+
+  // and then it is as if it never happened
+  expect(drum(statuses.at(-1)!)).toBe(7.74)
+  expect(statuses.at(-1)).not.toContain('last')
+  const receiptText = (await $.command.run(run(''))).text!
+  expect(receiptText).toContain('Rides     0 · 0 jumps')
+  expect(receiptText).toContain('TOTAL  $7.74')
+
+  // the real crossing of $10 still rings later
+  toasts.length = 0
+  await $.session.measure({ context: { window: 1 }, rateLimits: [], cost: { usd: 10.2 }, changed: ['cost'] })
+  await clock.advance(3000)
+  expect(toasts.filter(t => t.includes('$10.00')).length).toBe(1)
+})

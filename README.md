@@ -24,6 +24,7 @@ A Claude Code mod that puts a taxi meter in your status line. The fare ticks up 
 | --- | --- |
 | `/taxi` | print the receipt |
 | `/taxi meter` | open the live meter pane: big LED digits, ride time, burn rate, budget bar, 30-minute spend sparkline, recent rides, and buttons (`r` receipt, `c` USD⇄CNY, `b` budget +$5, `n` no budget, `h` hide/show status) |
+| `/taxi demo` | a pretend 10-second ride for recording a GIF: streams, waits on a tool, rings a milestone, then puts the meter back. Nothing is billed or recorded |
 | `/taxi share` | copy a ride summary (fare, rides, payback, priciest prompt) to the clipboard |
 | `/taxi plan 200` | your subscription's monthly price in USD; shows payback (`off` clears it) |
 | `/taxi budget 5` | set this session's fare limit; the status line shows `budget 49%` and warns at 80% and 100% (`off` clears it) |

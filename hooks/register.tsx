@@ -11,6 +11,7 @@ import {
   costOf,
   duration,
   face,
+  MILESTONES,
   milestoneAt,
   milestoneToast,
   monthKey,
@@ -72,6 +73,28 @@ type Step = {
 
 type Ride = { startUsd: number; startedAt: number; prompt: string; jumps: number }
 
+/** A pretend ride for recording: drives the drum on its own clock, bills nothing, records nothing. */
+type Demo = {
+  startedAt: number
+  /** The fare the drum stood at when it began, USD. */
+  startUsd: number
+  /** What the whole ride adds, USD. */
+  total: number
+  /** What it has added so far, USD. */
+  added: number
+  phase: Phase
+  tool: string | null
+  jumps: number
+  /** The milestone it rang, so it rings once. */
+  rung: number
+  /** The last ride's fare before it, put back when it ends. */
+  lastTrip: number | null
+  timer: Timer | null
+}
+
+/** The demo's script, ms from its start. */
+const DEMO = { stream1: 800, tool: 5000, stream2: 6800, end: 10000, done: 14000 }
+
 const cfg = {
   lang: 'en' as Lang,
   currency: 'USD' as Currency,
@@ -105,6 +128,7 @@ const m = {
   lastTrip: null as number | null,
   model: '',
   samples: [] as [number, number][],
+  demo: null as Demo | null,
   // Session values the tick reads synchronously, kept in step with their atoms.
   budgetUsd: 0,
   /** API value this calendar month, across sessions, as last credited. */
@@ -122,12 +146,13 @@ const units = (usd: number) => toUnits(usd, cfg.currency, cfg.cnyRate)
 const factor = () => (cfg.currency === 'CNY' ? cfg.cnyRate : 1)
 
 function target(): number {
-  let usd = m.ledger
+  let usd = m.ledger + (m.demo?.added ?? 0)
   for (const s of m.steps.values()) usd += s.final ?? streamingCost(s.model, s.chars, s.quietTokens)
   return usd
 }
 
 function phase(): Phase {
+  if (m.demo) return m.demo.phase
   const isStreaming = [...m.steps.values()].some(s => s.final === null)
   if (isStreaming) return 'hired'
   if (m.tools > 0) return 'waiting'
@@ -143,11 +168,21 @@ function snapshot(): Live {
     phase: phase(),
     units: Math.max(0, m.shown),
     flash: m.now < m.flashUntil ? m.flash : 0,
-    trip: m.ride !== null ? Math.max(0, m.shown - units(m.ride.startUsd)) : m.lastTrip,
+    trip:
+      m.demo && m.demo.phase !== 'idle'
+        ? Math.max(0, m.shown - units(m.demo.startUsd))
+        : m.ride !== null
+          ? Math.max(0, m.shown - units(m.ride.startUsd))
+          : m.lastTrip,
     rate,
-    tool: m.tool,
+    tool: m.demo ? m.demo.tool : m.tool,
     isLit: m.isLit,
-    rideMs: m.ride !== null ? Math.max(0, m.now - m.ride.startedAt) : 0,
+    rideMs:
+      m.demo && m.demo.phase !== 'idle'
+        ? Math.max(0, m.now - m.demo.startedAt)
+        : m.ride !== null
+          ? Math.max(0, m.now - m.ride.startedAt)
+          : 0,
   }
 }
 
@@ -183,6 +218,16 @@ async function draw($: EngineInterface): Promise<void> {
 /** Rings once the drum itself rolls past a milestone, and warns as the budget runs out. */
 async function ring($: EngineInterface): Promise<void> {
   const usd = m.shown / 100 / factor()
+  if (m.demo) {
+    // The demo rings like the real thing and writes nothing down.
+    const passed = milestoneAt(usd)
+    if (passed > m.demo.rung) {
+      m.demo.rung = passed
+      $.ui.toast(milestoneToast(passed, cfg.lang, cfg.currency, cfg.cnyRate), { timeoutMs: 5000 })
+      if (cfg.hasSound) await $.audio.play({ asset: 'sounds/kaching.wav' }).catch(() => undefined)
+    }
+    return
+  }
   const passed = milestoneAt(usd)
   if (passed > (await read($, milestone))) {
     await update($, milestone, () => passed)
@@ -235,8 +280,11 @@ async function tick($: EngineInterface): Promise<void> {
       m.flash = (at - m.lastJumpAt <= BURST_MS ? m.flash : 0) + step
       m.lastJumpAt = at
       m.flashUntil = at + FLASH_MS
-      if (m.ride) m.ride.jumps += 1
-      await update($, jumpCount, n => n + 1)
+      if (m.demo) m.demo.jumps += 1
+      else {
+        if (m.ride) m.ride.jumps += 1
+        await update($, jumpCount, n => n + 1)
+      }
       await ring($)
     }
 
@@ -387,6 +435,73 @@ async function printReceipt($: EngineInterface): Promise<string> {
   return receipt(await figures($))
 }
 
+/** Starts a pretend ride that crosses the next milestone, so a recording catches every beat. */
+async function startDemo($: EngineInterface): Promise<void> {
+  const now = await $.clock.now()
+  const fare = target()
+  const next = MILESTONES.find(x => x > fare + 0.05)
+  // Ring a milestone near the end when one is in reach; otherwise a plain ride.
+  const total = next !== undefined && next - fare <= 6 ? next - fare + 0.37 : 2.48
+  m.demo = {
+    startedAt: now,
+    startUsd: fare,
+    total,
+    added: 0,
+    phase: 'hired',
+    tool: null,
+    jumps: 0,
+    rung: milestoneAt(fare),
+    lastTrip: m.lastTrip,
+    timer: null,
+  }
+  m.demo.timer = $.clock.every(100, () => void demoStep($))
+  await run($)
+}
+
+/** Moves the demo along its script: stream, wait on a tool, stream, arrive, then put everything back. */
+async function demoStep($: EngineInterface): Promise<void> {
+  const d = m.demo
+  if (!d) return
+  const t = (await $.clock.now()) - d.startedAt
+  const ease = (from: number, to: number, a: number, b: number) =>
+    from + (to - from) * Math.min(1, Math.max(0, (t - a) / (b - a)))
+
+  if (t < DEMO.stream1) {
+    d.phase = 'hired'
+  } else if (t < DEMO.tool) {
+    d.phase = 'hired'
+    d.added = ease(0, d.total * 0.45, DEMO.stream1, DEMO.tool)
+  } else if (t < DEMO.stream2) {
+    d.phase = 'waiting'
+    d.tool = 'Bash'
+  } else if (t < DEMO.end) {
+    d.phase = 'hired'
+    d.tool = null
+    d.added = ease(d.total * 0.45, d.total, DEMO.stream2, DEMO.end)
+  } else if (d.phase !== 'idle') {
+    d.phase = 'idle'
+    d.added = d.total
+    m.lastTrip = units(d.total)
+    const ride: Trip = {
+      fare: d.total,
+      ms: DEMO.end,
+      at: d.startedAt + DEMO.end,
+      prompt: 'demo',
+      model: m.model,
+      jumps: d.jumps,
+    }
+    $.ui.toast(bigTripToast(ride, cfg.lang, cfg.currency, cfg.cnyRate), { timeoutMs: 5000 })
+  } else if (t >= DEMO.done) {
+    // Back to the real meter, as if the demo never ran.
+    d.timer?.cancel()
+    m.demo = null
+    m.lastTrip = d.lastTrip
+    m.shown = units(target())
+    m.samples.length = 0
+  }
+  await run($)
+}
+
 const HELP = {
   en: [
     '/taxi                print the receipt',
@@ -397,6 +512,7 @@ const HELP = {
     '/taxi hide | show    hide or show the status line meter',
     '/taxi plan 200       your subscription price a month: shows how many times over it pays back (off to clear)',
     '/taxi share          copy a ride summary to paste anywhere',
+    '/taxi demo           a pretend 10-second ride for recording a GIF: nothing is billed or recorded',
   ],
   zh: [
     '/taxi                打印小票',
@@ -407,6 +523,7 @@ const HELP = {
     '/taxi hide | show    隐藏或显示状态栏计价器',
     '/taxi plan 200       填写每月订阅价，显示本月回本了几倍（off 清除）',
     '/taxi share          复制一段行程总结，方便分享',
+    '/taxi demo           模拟一段 10 秒的行程，方便录 GIF：不计费、不记录',
   ],
 } as const
 
@@ -424,7 +541,7 @@ export const register: Register = (on, options) => {
       name: 'taxi',
       description:
         cfg.lang === 'zh' ? '计价器：小票、实时面板、预算、币种' : 'Taxi meter: receipt, live pane, budget, currency',
-      argumentHint: 'meter | share | plan <usd|off> | budget <usd|off> | usd | cny | en | zh | hide | show',
+      argumentHint: 'meter | demo | share | plan <usd|off> | budget <usd|off> | usd | cny | en | zh | hide | show',
       immediate: true,
     })
     const { cost } = await $.session.usage()
@@ -626,6 +743,18 @@ export const register: Register = (on, options) => {
           ? zh ? '（已复制到剪贴板）' : '(copied to your clipboard)'
           : zh ? '（没能复制，请手动选中上面的文字）' : "(couldn't copy: select the text above)"
         return { text: `${text}\n\n${note}` }
+      }
+      case 'demo': {
+        if (m.demo) return { text: zh ? '演示已经在跑了' : 'A demo ride is already running' }
+        if (phase() !== 'idle') {
+          return { text: zh ? '计价器正在载客，等 Claude 这轮结束后再演示' : 'The meter is busy: run the demo once Claude finishes this turn' }
+        }
+        await startDemo($)
+        return {
+          text: zh
+            ? '🎬 演示行程开始：约 14 秒，不计费、不记录，结束后计价器恢复原样'
+            : '🎬 Demo ride started: about 14 seconds, nothing billed or recorded, and the meter goes back to normal after',
+        }
       }
       case 'hide':
         await setHidden($, true)
