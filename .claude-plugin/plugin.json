@@ -5,6 +5,7 @@
   "author": {
     "name": "gxc.510"
   },
+  "license": "MIT",
   "types": "./types/index.d.ts",
   "userConfig": {
     "language": {
