@@ -1,0 +1,80 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  :root { --yellow:#f5c518; --bg:#0d0d10; --panel:#16161b; --line:#2a2a32; --text:#f4f4f5; --dim:#8b8b95; --red:#ff4d4f; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:1280px; height:640px; background:var(--bg); overflow:hidden; }
+  body { font-family:-apple-system, "SF Pro Display", "Helvetica Neue", sans-serif; color:var(--text); position:relative; }
+  .glow { position:absolute; right:-120px; top:-160px; width:720px; height:720px; border-radius:50%;
+          background:radial-gradient(circle, rgba(245,197,24,.16), rgba(245,197,24,0) 65%); }
+  .wrap { position:absolute; inset:0 0 56px 0; display:flex; align-items:center; padding:0 64px; gap:44px; }
+  .left { width:540px; flex:none; }
+  .badge { display:inline-block; font:600 18px/1 "SF Mono", Menlo, monospace; letter-spacing:.18em; color:var(--yellow);
+           border:1.5px solid rgba(245,197,24,.5); border-radius:999px; padding:10px 16px; margin-bottom:28px; }
+  h1 { font-size:76px; line-height:1.02; font-weight:800; letter-spacing:-.02em; }
+  h1 .y { color:var(--yellow); }
+  .sub { margin-top:22px; font-size:28px; white-space:nowrap; line-height:1.35; color:#c9c9d1; }
+  .sub b { color:var(--text); font-weight:700; }
+  .url { margin-top:34px; white-space:nowrap; font:500 20px/1 "SF Mono", Menlo, monospace; color:var(--dim); }
+  .right { width:568px; flex:none; }
+  .pane { background:var(--panel); border:1.5px solid var(--line); border-radius:22px; padding:26px 30px 24px;
+          box-shadow:0 30px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.02) inset; }
+  .row { display:flex; justify-content:space-between; font:700 20px/1 "SF Mono", Menlo, monospace; }
+  .lamp { color:var(--red); } .brand { color:var(--dim); font-weight:500; }
+  .led { margin:24px 0 20px; display:flex; align-items:flex-end; gap:14px; height:118px;
+         filter:drop-shadow(0 0 10px rgba(245,197,24,.55)); }
+  .led .cur { font:800 64px/1 "SF Mono", Menlo, monospace; color:var(--yellow); align-self:center; margin-right:2px; }
+  .led svg { height:118px; width:auto; overflow:visible; }
+  .meta { font:500 20px/1.5 "SF Mono", Menlo, monospace; color:#c9c9d1; }
+  .meta .up { color:var(--yellow); }
+  .bar { margin-top:14px; font:500 18px/1 "SF Mono", Menlo, monospace; color:#4ade80; white-space:nowrap; }
+  .status { margin-top:22px; background:#0a0a0c; border:1.5px solid var(--line); border-radius:14px; padding:14px 18px;
+            font:600 16px/1 "SF Mono", Menlo, monospace; white-space:nowrap; color:var(--text); }
+  .status .y { color:var(--yellow); } .status .d { color:var(--dim); }
+  .checker { position:absolute; left:0; right:0; bottom:0; height:56px;
+             background-color:var(--yellow);
+             background-image:
+               linear-gradient(45deg, #111 25%, transparent 25%, transparent 75%, #111 75%),
+               linear-gradient(45deg, #111 25%, transparent 25%, transparent 75%, #111 75%);
+             background-size:56px 56px; background-position:0 0, 28px 28px; }
+</style></head>
+<body>
+  <div class="glow"></div>
+  <div class="wrap">
+    <div class="left">
+      <div class="badge">A CLAUDE CODE MOD</div>
+      <h1>🚕 Claude<br><span class="y">Taxi Meter</span></h1>
+      <p class="sub">Every token Claude burns<br>makes the fare jump:<br><b>$0.03… $0.47… $2.18.</b></p>
+      <p class="url">github.com/gxcsoccer/claude-taxi-meter</p>
+    </div>
+    <div class="right">
+      <div class="pane">
+        <div class="row"><span class="lamp">HIRED ●</span><span class="brand">CLAUDE TAXI</span></div>
+        <div class="led" id="led"><span class="cur">$</span></div>
+        <div class="meta">ride $0.47 &nbsp;<span class="up">▲0.03</span></div>
+        <div class="meta" style="color:var(--dim)">time 0:41 · rate $0.42/min</div>
+        <div class="bar">budget ██████████░░░░░░░ 44%</div>
+      </div>
+      <div class="status">🚖 <span class="y">HIRED●</span>&nbsp; $2.18 ▲0.03 <span class="d">·</span> trip $0.47 <span class="d">·</span> 🔥$0.42/min</div>
+    </div>
+  </div>
+  <div class="checker"></div>
+<script>
+  // Seven segments: a top, b upper right, c lower right, d bottom, e lower left, f upper left, g middle.
+  const ON = { '0':'abcdef', '1':'bc', '2':'abged', '8':'abcdefg' };
+  const W = 64, H = 118, T = 12, G = 3;
+  const SEG = {
+    a: [T/2+G, 0, W-T-2*G, T], d: [T/2+G, H-T, W-T-2*G, T], g: [T/2+G, H/2-T/2, W-T-2*G, T],
+    f: [0, T/2+G, T, H/2-T-G], e: [0, H/2+G, T, H/2-T-G],
+    b: [W-T, T/2+G, T, H/2-T-G], c: [W-T, H/2+G, T, H/2-T-G],
+  };
+  const digit = ch => {
+    const lit = ON[ch];
+    const rects = Object.entries(SEG).map(([k, [x, y, w, h]]) =>
+      `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${T/2}" fill="${lit.includes(k) ? '#f5c518' : '#2b2612'}"/>`).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${rects}</svg>`;
+  };
+  const dot = `<svg viewBox="0 0 16 ${H}" style="width:16px" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="${H-16}" width="16" height="16" rx="4" fill="#f5c518"/></svg>`;
+  document.getElementById('led').insertAdjacentHTML('beforeend', digit('2') + dot + digit('1') + digit('8'));
+</script>
+</body></html>
